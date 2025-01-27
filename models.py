@@ -12,14 +12,28 @@ from sqlalchemy.orm import declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.dialects.postgresql import ARRAY
 import asyncio
+from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import Column, Integer, String, Text, Date, ForeignKey, Table
 from sqlalchemy.orm import relationship, declarative_base
 from sqlalchemy.ext.asyncio import create_async_engine
-from DB.config import DATABASE_URL
+from .DB.config import DATABASE_URL
 
 Base = declarative_base()
+
+class AuthorRead(BaseModel):
+    id: int
+    name: str
+    biography: Optional[str]
+    date_of_birth: Optional[date]
+    class Config:
+        orm_mode = True
+        
+class AuthorCreate(BaseModel):
+    name: str
+    biography: Optional[str]
+    date_of_birth: Optional[date]
 
 class BookCreate(BaseModel):
     name: str
@@ -27,6 +41,27 @@ class BookCreate(BaseModel):
     date_of_publication: date
     genre: str
     count_in_stock: int
+    author_ids: List[int] 
+
+class BookUpdate(BaseModel):
+    name: Optional[str]
+    description: Optional[str]
+    date_of_publication: Optional[date]
+    genre: Optional[str]
+    count_in_stock: Optional[int]
+    class Config:
+        orm_mode = True
+
+class BookRead(BaseModel):
+    id: int
+    name: str
+    description: str
+    genre: str
+    count_in_stock: int
+    authors: List[AuthorRead] 
+    class Config:
+        orm_mode = True
+
 
 book_author = Table(
     "book_author",
@@ -48,7 +83,7 @@ class Author(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(255), nullable=False, unique=True)
     biography = Column(Text, nullable=True)
-    date_of_burth = Column(Date, nullable=True)
+    date_of_birth = Column(Date, nullable=True)
     books = relationship("Book", secondary=book_author, back_populates="authors")
 
 class Book(Base):

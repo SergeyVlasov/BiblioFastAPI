@@ -1,19 +1,18 @@
-from DB.models import Book, BookCreate
+from .models import Book, BookCreate, User, BookUpdate, BookRead, Author, AuthorRead, AuthorCreate
 from sqlalchemy.ext.asyncio import create_async_engine
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import select
-from security.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
-from security.password import verify_password
-from security.jwtgen import create_access_token
+from .security.config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from .security.password import verify_password
+from .security.jwtgen import create_access_token
 from datetime import timedelta
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from DB.models import User 
-from DB.config import DATABASE_URL
+from .DB.config import DATABASE_URL
 
 engine = create_async_engine(DATABASE_URL, echo=True)
 
@@ -24,15 +23,12 @@ async def get_session():
     async with async_session() as session:
         yield session
 
-@app.post("/books/")
-async def add_book(book: BookCreate, session: AsyncSession = Depends(get_session)):
-    query = select(Book).filter_by(name=book.name)
-    result = await session.execute(query)
-    existing_book = result.scalar_one_or_none()
-
-    if existing_book:
-        raise HTTPException(status_code=400, detail="A book with this name already exists.")
-
+@app.post("/books/", response_model=BookRead, status_code=201)
+async def add_book_with_authors(book: BookCreate, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Author).filter(Author.id.in_(book.author_ids)))
+    db_authors = result.scalars().all()
+    if not db_authors or len(db_authors) != len(book.author_ids):
+        raise HTTPException(status_code=400, detail="One or more authors not found")
     new_book = Book(
         name=book.name,
         description=book.description,
@@ -40,10 +36,99 @@ async def add_book(book: BookCreate, session: AsyncSession = Depends(get_session
         genre=book.genre,
         count_in_stock=book.count_in_stock,
     )
-
+    new_book.authors = db_authors
     session.add(new_book)
     await session.commit()
-    return {"message": "Book added successfully!", "book_id": new_book.id}
+    await session.refresh(new_book)
+
+    return new_book
+
+@app.delete("/books/{book_id}", status_code=204)
+async def delete_book(book_id: int, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Book).filter(Book.id == book_id))
+    db_book = result.scalars().first()
+    if not db_book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    await session.delete(db_book)
+    await session.commit()
+    return {"detail": "Book deleted successfully"}
+
+
+@app.put("/books/{book_id}", response_model=BookUpdate)
+async def update_book(
+    book_id: int,
+    book_data: BookUpdate,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(select(Book).filter(Book.id == book_id))
+    db_book = result.scalars().first()
+    if not db_book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    for key, value in book_data.dict(exclude_unset=True).items():
+        setattr(db_book, key, value)
+    session.add(db_book)
+    await session.commit()
+    await session.refresh(db_book)
+    return db_book
+
+@app.get("/books/{book_id}", response_model=BookRead)
+async def get_book_by_id(book_id: int, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Book).filter(Book.id == book_id))
+    db_book = result.scalars().first()
+
+    if not db_book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    return db_book
+
+@app.get("/books/name/{book_name}", response_model=BookRead)
+async def get_book_by_name(book_name: str, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Book).filter(Book.name == book_name))
+    db_book = result.scalars().first()
+    if not db_book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return db_book
+
+@app.get("/books/description/{description}", response_model=list[BookRead])
+async def get_books_by_description(
+    description: str, session: AsyncSession = Depends(get_session)
+):
+    result = await session.execute(
+        select(Book).filter(Book.description.ilike(f"%{description}%"))
+    )
+    books = result.scalars().all()
+    if not books:
+        raise HTTPException(status_code=404, detail="No books found matching the description")
+    return books
+
+@app.get("/books/author/{author_name}", response_model=list[BookRead])
+async def get_books_by_author(author_name: str, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Author).filter(Author.name.ilike(f"%{author_name}%")))
+    db_author = result.scalars().first()
+    if not db_author:
+        raise HTTPException(status_code=404, detail="Author not found")
+    books = db_author.books
+    if not books:
+        raise HTTPException(status_code=404, detail="No books found for this author")
+    return books
+
+@app.post("/authors/", response_model=AuthorRead, status_code=201)
+async def add_author(author: AuthorCreate, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Author).filter(Author.name == author.name))
+    existing_author = result.scalars().first()
+    if existing_author:
+        raise HTTPException(status_code=400, detail="Author already exists")
+    new_author = Author(name=author.name)
+    session.add(new_author)
+    await session.commit()
+    await session.refresh(new_author)
+    return new_author
+
+@app.get("/authors/", response_model=list[AuthorRead])
+async def get_all_authors(session: AsyncSession = Depends(get_session)):
+    result = await session.execute(select(Author))
+    authors = result.scalars().all()
+    return authors
 
 @app.post("/token")
 async def login_for_access_token(

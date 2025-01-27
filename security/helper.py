@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta
 from typing import Optional
-from config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
+from .config import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 import jwt
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from ..DB.models import User
+from ..models import User
 from jwt import decode, ExpiredSignatureError, InvalidTokenError
 
 def decode_access_token(token: str):
