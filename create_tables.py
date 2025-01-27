@@ -95,7 +95,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(255), nullable=False, unique=True)
     email = Column(String(255), nullable=False, unique=True)
-    hashed_password = Column(String(255), nullable=False)
+    password = Column(String(255), nullable=False)
     roles = relationship("Role", secondary=user_role, back_populates="users")
     borrowed_books = relationship("UserGetBook", back_populates="user", cascade="all, delete-orphan")
 

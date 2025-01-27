@@ -3,7 +3,7 @@ from datetime import date
 from typing import Optional
 from sqlalchemy.orm import declarative_base
 from sqlalchemy import Column, Integer, String, Text, Date
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, EmailStr
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
@@ -34,6 +34,16 @@ class AuthorCreate(BaseModel):
     name: str
     biography: Optional[str]
     date_of_birth: Optional[date]
+    class Config:
+        orm_mode = True
+
+class AuthorUpdate(BaseModel):
+    name: str
+    biography: Optional[str]
+    date_of_birth: Optional[date]
+
+    class Config:
+        orm_mode = True
 
 class BookCreate(BaseModel):
     name: str
@@ -116,7 +126,7 @@ class User(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     username = Column(String(255), nullable=False, unique=True)
     email = Column(String(255), nullable=False, unique=True)
-    hashed_password = Column(String(255), nullable=False)
+    password = Column(String(255), nullable=False)
     roles = relationship("Role", secondary=user_role, back_populates="users")
     borrowed_books = relationship("UserGetBook", back_populates="user", cascade="all, delete-orphan")
 
@@ -131,3 +141,18 @@ class UserGetBook(Base):
 
     user = relationship("User", back_populates="borrowed_books")
     book = relationship("Book", back_populates="borrowed_by_users")
+
+class UserCreate(BaseModel):
+    username: str
+    email: EmailStr
+    password: str
+
+class UserRead(BaseModel):
+    id: int
+    username: str
+    email: EmailStr
+    access_token: str
+    token_type: str
+
+    class Config:
+        orm_mode = True
