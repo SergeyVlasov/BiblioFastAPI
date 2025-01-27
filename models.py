@@ -49,6 +49,7 @@ class BookUpdate(BaseModel):
     date_of_publication: Optional[date]
     genre: Optional[str]
     count_in_stock: Optional[int]
+
     class Config:
         orm_mode = True
 
@@ -58,7 +59,8 @@ class BookRead(BaseModel):
     description: str
     genre: str
     count_in_stock: int
-    authors: List[AuthorRead] 
+    authors: List[AuthorRead] = []
+
     class Config:
         orm_mode = True
 

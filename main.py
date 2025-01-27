@@ -12,6 +12,7 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.orm import joinedload 
 from .DB.config import DATABASE_URL
 
 engine = create_async_engine(DATABASE_URL, echo=True)
@@ -24,7 +25,7 @@ async def get_session():
         yield session
 
 @app.post("/books/", response_model=BookRead, status_code=201)
-async def add_book_with_authors(book: BookCreate, session: AsyncSession = Depends(get_session)):
+async def add_book(book: BookCreate, session: AsyncSession = Depends(get_session)):
     result = await session.execute(select(Author).filter(Author.id.in_(book.author_ids)))
     db_authors = result.scalars().all()
     if not db_authors or len(db_authors) != len(book.author_ids):
@@ -73,33 +74,37 @@ async def update_book(
 
 @app.get("/books/{book_id}", response_model=BookRead)
 async def get_book_by_id(book_id: int, session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(Book).filter(Book.id == book_id))
-    db_book = result.scalars().first()
-
-    if not db_book:
+    result = await session.execute(
+        select(Book)
+        .where(Book.id == book_id)
+        .options(joinedload(Book.authors))
+    )
+    book = result.scalars().first()
+    if not book:
         raise HTTPException(status_code=404, detail="Book not found")
+    return book
 
-    return db_book
-
-@app.get("/books/name/{book_name}", response_model=BookRead)
-async def get_book_by_name(book_name: str, session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(Book).filter(Book.name == book_name))
-    db_book = result.scalars().first()
-    if not db_book:
-        raise HTTPException(status_code=404, detail="Book not found")
-    return db_book
+@app.get("/books/", response_model=list[BookRead])
+async def get_all_books(session: AsyncSession = Depends(get_session)):
+    result = await session.execute(
+        select(Book).options(joinedload(Book.authors))
+    )
+    books = result.unique().scalars().all() 
+    return books
 
 @app.get("/books/description/{description}", response_model=list[BookRead])
-async def get_books_by_description(
-    description: str, session: AsyncSession = Depends(get_session)
+async def get_book_by_description(
+    book_description: str, session: AsyncSession = Depends(get_session)
 ):
     result = await session.execute(
-        select(Book).filter(Book.description.ilike(f"%{description}%"))
+        select(Book)
+        .where(Book.description.ilike(f"%{book_description}%"))  
+        .options(joinedload(Book.authors))
     )
-    books = result.scalars().all()
-    if not books:
-        raise HTTPException(status_code=404, detail="No books found matching the description")
-    return books
+    book = result.scalars().first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    return book
 
 @app.get("/books/author/{author_name}", response_model=list[BookRead])
 async def get_books_by_author(author_name: str, session: AsyncSession = Depends(get_session)):
@@ -111,6 +116,19 @@ async def get_books_by_author(author_name: str, session: AsyncSession = Depends(
     if not books:
         raise HTTPException(status_code=404, detail="No books found for this author")
     return books
+
+@app.get("/books/name/{book_name}", response_model=list[BookRead])
+async def get_book_by_name(book_name: str, session: AsyncSession = Depends(get_session)):
+    result = await session.execute(
+        select(Book)
+        .where(Book.name == book_name)
+        .options(joinedload(Book.authors))
+    )
+    book = result.scalars().first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    return book    
 
 @app.post("/authors/", response_model=AuthorRead, status_code=201)
 async def add_author(author: AuthorCreate, session: AsyncSession = Depends(get_session)):
