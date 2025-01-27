@@ -130,18 +130,6 @@ class User(Base):
     roles = relationship("Role", secondary=user_role, back_populates="users")
     borrowed_books = relationship("UserGetBook", back_populates="user", cascade="all, delete-orphan")
 
-class UserGetBook(Base):
-    __tablename__ = "user_get_book"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    book_id = Column(Integer, ForeignKey("books.id", ondelete="CASCADE"), nullable=False)
-    date_begin = Column(Date, nullable=False) 
-    date_end = Column(Date, nullable=True)  
-
-    user = relationship("User", back_populates="borrowed_books")
-    book = relationship("Book", back_populates="borrowed_by_users")
-
 class UserCreate(BaseModel):
     username: str
     email: EmailStr
@@ -153,6 +141,25 @@ class UserRead(BaseModel):
     email: EmailStr
     access_token: str
     token_type: str
+    # role: str
 
     class Config:
         orm_mode = True
+
+class UserGetBook(Base):
+    __tablename__ = "user_get_book"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
+    date_begin = Column(Date, nullable=False)
+    date_end = Column(Date, nullable=True) 
+
+    user = relationship("User", back_populates="borrowed_books")
+    book = relationship("Book", back_populates="borrowed_by_users")
+
+class BorrowBookRequest(BaseModel):
+    book_id: int
+    date_begin: date
+    date_end: date
+    
