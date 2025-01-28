@@ -151,7 +151,8 @@ class UserGetBook(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     book_id = Column(Integer, ForeignKey("books.id"), nullable=False)
     date_begin = Column(Date, nullable=False)
-    date_end = Column(Date, nullable=True) 
+    date_end_plan = Column(Date, nullable=True)  
+    date_end_fact = Column(Date, nullable=True) 
 
     user = relationship("User", back_populates="borrowed_books")
     book = relationship("Book", back_populates="borrowed_by_users")
@@ -159,5 +160,8 @@ class UserGetBook(Base):
 class BorrowBookRequest(BaseModel):
     book_id: int
     date_begin: date
-    date_end: date
+    date_end_plan: date
+
+class BorrowBookId(BaseModel):
+    id: int
     

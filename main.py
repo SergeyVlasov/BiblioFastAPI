@@ -1,4 +1,4 @@
-from .models import Book, BookCreate, User, BookUpdate, BookRead, Author, AuthorRead, AuthorCreate, AuthorUpdate, UserRead, UserCreate, UserGetBook, BorrowBookRequest
+from .models import Book, BookCreate, User, BookUpdate, BookRead, Author, AuthorRead, AuthorCreate, AuthorUpdate, UserRead, UserCreate, UserGetBook, BorrowBookRequest, BorrowBookId
 from sqlalchemy.ext.asyncio import create_async_engine
 from fastapi import FastAPI, HTTPException, Depends
 from sqlalchemy.orm import sessionmaker
@@ -269,7 +269,7 @@ async def borrow_book(
         user_id=current_user.id,
         book_id=borrow_request.book_id,
         date_begin=borrow_request.date_begin,
-        date_end=borrow_request.date_end
+        date_end_plan=borrow_request.date_end_plan
     )
     session.add(borrow_record)
     book.count_in_stock -= 1
@@ -280,14 +280,14 @@ async def borrow_book(
 
 @app.post("/end-borrow", status_code=status.HTTP_200_OK)
 async def end_borrow(
-    borrow_id: int,
+    borrow_id: BorrowBookId,
     session: AsyncSession = Depends(get_session),
     current_user=Depends(get_current_user),
 ):
     result = await session.execute(
         select(UserGetBook)
         .options(joinedload(UserGetBook.book))
-        .where(UserGetBook.id == borrow_id, UserGetBook.user_id == current_user.id)
+        .where(UserGetBook.id == borrow_id.id, UserGetBook.user_id == current_user.id)
     )
     borrow_record = result.scalars().first()
 
@@ -297,13 +297,13 @@ async def end_borrow(
             detail="Borrowing record not found or does not belong to the current user."
         )
 
-    if borrow_record.date_end:
+    if borrow_record.date_end_fact:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This borrowing record has already been ended."
         )
 
-    borrow_record.date_end = date.today()
+    borrow_record.date_end_fact = date.today()
     book = borrow_record.book
     book.count_in_stock += 1
 
@@ -316,5 +316,5 @@ async def end_borrow(
         "message": "Book returned successfully",
         "borrow_id": borrow_record.id,
         "book_id": book.id,
-        "date_end": borrow_record.date_end
+        "date_end_fact": borrow_record.date_end_fact
     }
