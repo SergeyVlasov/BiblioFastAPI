@@ -27,8 +27,6 @@ class AuthorRead(BaseModel):
     name: str
     biography: Optional[str]
     date_of_birth: Optional[date]
-    class Config:
-        orm_mode = True
         
 class AuthorCreate(BaseModel):
     name: str
@@ -69,7 +67,7 @@ class BookRead(BaseModel):
     description: str
     genre: str
     count_in_stock: int
-    authors: List[AuthorRead] = []
+    authors: List[AuthorRead]
 
     class Config:
         orm_mode = True

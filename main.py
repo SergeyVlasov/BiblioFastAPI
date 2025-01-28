@@ -14,6 +14,7 @@ from sqlalchemy.orm import joinedload
 from .DB.config import DATABASE_URL
 from fastapi.security import OAuth2PasswordBearer
 from .auth.helper import decode_access_token
+from datetime import date
 
 engine = create_async_engine(DATABASE_URL, echo=True)
 app = FastAPI()
@@ -51,7 +52,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme), session: AsyncSe
     return user
 
 @app.post("/books/", response_model=BookRead, status_code=201)
-async def add_book(book: BookCreate, session: AsyncSession = Depends(get_session)):
+async def add_book(book: BookCreate, session: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
     result = await session.execute(select(Author).filter(Author.id.in_(book.author_ids)))
     db_authors = result.scalars().all()
     if not db_authors or len(db_authors) != len(book.author_ids):
@@ -71,7 +72,7 @@ async def add_book(book: BookCreate, session: AsyncSession = Depends(get_session
     return new_book
 
 @app.delete("/books/{book_id}", status_code=204)
-async def delete_book(book_id: int, session: AsyncSession = Depends(get_session)):
+async def delete_book(book_id: int, session: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
     result = await session.execute(select(Book).filter(Book.id == book_id))
     db_book = result.scalars().first()
     if not db_book:
@@ -86,6 +87,7 @@ async def update_book(
     book_id: int,
     book_data: BookUpdate,
     session: AsyncSession = Depends(get_session),
+    current_user: UserRead = Depends(get_current_user)
 ):
     result = await session.execute(select(Book).filter(Book.id == book_id))
     db_book = result.scalars().first()
@@ -157,26 +159,29 @@ async def get_book_by_name(book_name: str, session: AsyncSession = Depends(get_s
     return book    
 
 @app.post("/authors/", response_model=AuthorRead, status_code=201)
-async def add_author(author: AuthorCreate, session: AsyncSession = Depends(get_session)):
+async def add_author(author: AuthorCreate, session: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
     result = await session.execute(select(Author).filter(Author.name == author.name))
     existing_author = result.scalars().first()
     if existing_author:
         raise HTTPException(status_code=400, detail="Author already exists")
-    new_author = Author(name=author.name)
+    new_author = Author(name=author.name, 
+                        biography=author.biography,
+                        date_of_birth=author.date_of_birth
+                        )
     session.add(new_author)
     await session.commit()
     await session.refresh(new_author)
     return new_author
 
 @app.get("/authors/", response_model=list[AuthorRead])
-async def get_all_authors(session: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
+async def get_all_authors(session: AsyncSession = Depends(get_session)):
     print(current_user)
     result = await session.execute(select(Author))
     authors = result.scalars().all()
     return authors
 
 @app.delete("/authors/{author_id}", status_code=204)
-async def delete_author(author_id: int, session: AsyncSession = Depends(get_session)):
+async def delete_author(author_id: int, session: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
     result = await session.execute(select(Author).where(Author.id == author_id))
     author = result.scalars().first()
     if not author:
@@ -186,7 +191,7 @@ async def delete_author(author_id: int, session: AsyncSession = Depends(get_sess
     return {"detail": "Author deleted successfully"}
 
 @app.put("/authors/{author_id}", response_model=AuthorRead)
-async def update_author(author_id: int, author_update: AuthorUpdate, session: AsyncSession = Depends(get_session)):
+async def update_author(author_id: int, author_update: AuthorUpdate, session: AsyncSession = Depends(get_session), current_user: UserRead = Depends(get_current_user)):
     result = await session.execute(select(Author).where(Author.id == author_id))
     author = result.scalars().first()
     if not author:
@@ -255,11 +260,11 @@ async def borrow_book(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Book is not available in stock."
         )
-    if current_user.borrowed_books >= 5:
-                raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="User borrowed more than 5 books"
-        )
+    # if current_user.borrowed_books >= 5:
+    #             raise HTTPException(
+    #         status_code=status.HTTP_400_BAD_REQUEST,
+    #         detail="User borrowed more than 5 books"
+    #     )
     borrow_record = UserGetBook(
         user_id=current_user.id,
         book_id=borrow_request.book_id,
@@ -272,3 +277,44 @@ async def borrow_book(
     await session.commit()
     await session.refresh(borrow_record)
     return {"message": "Book borrowed successfully", "borrow_record": borrow_record.id}
+
+@app.post("/end-borrow", status_code=status.HTTP_200_OK)
+async def end_borrow(
+    borrow_id: int,
+    session: AsyncSession = Depends(get_session),
+    current_user=Depends(get_current_user),
+):
+    result = await session.execute(
+        select(UserGetBook)
+        .options(joinedload(UserGetBook.book))
+        .where(UserGetBook.id == borrow_id, UserGetBook.user_id == current_user.id)
+    )
+    borrow_record = result.scalars().first()
+
+    if not borrow_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Borrowing record not found or does not belong to the current user."
+        )
+
+    if borrow_record.date_end:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This borrowing record has already been ended."
+        )
+
+    borrow_record.date_end = date.today()
+    book = borrow_record.book
+    book.count_in_stock += 1
+
+    session.add(borrow_record)
+    session.add(book)
+    await session.commit()
+    await session.refresh(borrow_record)
+
+    return {
+        "message": "Book returned successfully",
+        "borrow_id": borrow_record.id,
+        "book_id": book.id,
+        "date_end": borrow_record.date_end
+    }
