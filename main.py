@@ -135,14 +135,13 @@ async def get_book_by_description(
 async def get_books_by_author(
     author_name: str, session: AsyncSession = Depends(get_session)
 ):
-    # Query to fetch books associated with the specific author
     result = await session.execute(
         select(Book)
-        .join(Book.authors)  # Join with the authors table
-        .filter(Author.name.ilike(f"%{author_name}%"))  # Filter by author name
-        .options(joinedload(Book.authors))  # Eager load authors
+        .join(Book.authors)  
+        .filter(Author.name.ilike(f"%{author_name}%"))  
+        .options(joinedload(Book.authors)) 
     )
-    books = result.unique().scalars().all()  # Fetch unique books
+    books = result.unique().scalars().all()  
 
     if not books:
         raise HTTPException(status_code=404, detail="No books found for this author")
