@@ -33,3 +33,7 @@ Start the local server:
 ```
 fastapi dev main.py
 ```
+on server
+```
+fastapi run main.py
+```
