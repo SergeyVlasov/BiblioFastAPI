@@ -179,7 +179,7 @@ async def add_author(author: AuthorCreate, session: AsyncSession = Depends(get_s
 
 @app.get("/authors/", response_model=list[AuthorRead])
 async def get_all_authors(session: AsyncSession = Depends(get_session)):
-    print(current_user)
+    print(get_current_user)
     result = await session.execute(select(Author))
     authors = result.scalars().all()
     return authors
@@ -280,10 +280,10 @@ async def start_book_rent(
     session.add(book)
     await session.commit()
     await session.refresh(borrow_record)
-    return {"message": "Book borrowed successfully", "borrow_record": borrow_record.id}
+    return {"message": "Book borrowed successfully", "rent_id_record": borrow_record.id}
 
 @app.post("/end-rent", status_code=status.HTTP_200_OK)
-async def end_book_rent(
+async def end_book_rent_by_rent_id(
     borrow_id: BorrowBookId,
     session: AsyncSession = Depends(get_session),
     current_user=Depends(get_current_user),
