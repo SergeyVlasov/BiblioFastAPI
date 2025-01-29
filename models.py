@@ -27,6 +27,9 @@ class AuthorRead(BaseModel):
     name: str
     biography: Optional[str]
     date_of_birth: Optional[date]
+    
+    class Config:
+        orm_mode = True
         
 class AuthorCreate(BaseModel):
     name: str

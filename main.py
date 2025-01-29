@@ -122,27 +122,31 @@ async def get_all_books(session: AsyncSession = Depends(get_session)):
 
 @app.get("/books/description/{description}", response_model=list[BookRead])
 async def get_book_by_description(
-    book_description: str, session: AsyncSession = Depends(get_session)
-):
+    description: str, session: AsyncSession = Depends(get_session)):
     result = await session.execute(
         select(Book)
-        .where(Book.description.ilike(f"%{book_description}%"))  
+        .where(Book.description.ilike(f"%{description}%"))  
         .options(joinedload(Book.authors))
     )
-    book = result.scalars().first()
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-    return book
+    books = result.unique().scalars().all()  
+    return books
 
 @app.get("/books/author/{author_name}", response_model=list[BookRead])
-async def get_books_by_author(author_name: str, session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(Author).filter(Author.name.ilike(f"%{author_name}%")))
-    db_author = result.scalars().first()
-    if not db_author:
-        raise HTTPException(status_code=404, detail="Author not found")
-    books = db_author.books
+async def get_books_by_author(
+    author_name: str, session: AsyncSession = Depends(get_session)
+):
+    # Query to fetch books associated with the specific author
+    result = await session.execute(
+        select(Book)
+        .join(Book.authors)  # Join with the authors table
+        .filter(Author.name.ilike(f"%{author_name}%"))  # Filter by author name
+        .options(joinedload(Book.authors))  # Eager load authors
+    )
+    books = result.unique().scalars().all()  # Fetch unique books
+
     if not books:
         raise HTTPException(status_code=404, detail="No books found for this author")
+
     return books
 
 @app.get("/books/name/{book_name}", response_model=list[BookRead])
@@ -152,7 +156,7 @@ async def get_book_by_name(book_name: str, session: AsyncSession = Depends(get_s
         .where(Book.name == book_name)
         .options(joinedload(Book.authors))
     )
-    book = result.scalars().first()
+    book = result.unique().scalars().all()  
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
@@ -242,8 +246,8 @@ async def login(username: str, password: str, session: AsyncSession = Depends(ge
     access_token = create_access_token(data={"sub": user.username}, expires_delta=access_token_expires)
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.post("/borrow-book", status_code=status.HTTP_201_CREATED)
-async def borrow_book(
+@app.post("/rent-book", status_code=status.HTTP_201_CREATED)
+async def start_book_rent(
     borrow_request: BorrowBookRequest,
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
@@ -278,8 +282,8 @@ async def borrow_book(
     await session.refresh(borrow_record)
     return {"message": "Book borrowed successfully", "borrow_record": borrow_record.id}
 
-@app.post("/end-borrow", status_code=status.HTTP_200_OK)
-async def end_borrow(
+@app.post("/end-rent", status_code=status.HTTP_200_OK)
+async def end_book_rent(
     borrow_id: BorrowBookId,
     session: AsyncSession = Depends(get_session),
     current_user=Depends(get_current_user),
