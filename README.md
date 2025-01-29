@@ -1,4 +1,4 @@
-# FastAPI + SQLAlchemy 2 + Alembic + Postgresql
+# How to start server
 
 
 ## How to use this starter
